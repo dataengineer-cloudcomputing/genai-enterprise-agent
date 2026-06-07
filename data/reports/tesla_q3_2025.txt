@@ -1,0 +1,10 @@
+--- RAPPORT STRATÉGIQUE TESLA - Q3 2025 ---
+Constructeur : Tesla
+Année : 2025
+Région : Europe (Allemagne)
+
+[NOTE LOGISTIQUE ET CHAINE D'APPROVISIONNEMENT]
+Au troisième trimestre 2025, la Gigafactory de Berlin-Brandenburg a fait face à des défis opérationnels majeurs. L'intégration de la nouvelle ligne de production pour les cellules de batterie structurales 4680 a subi des goulots d'étranglement techniques critiques, limitant la cadence d'assemblage des véhicules de 18% par rapport aux prévisions initiales. En conséquence, les prévisions de ventes internes pour le marché allemand ont dû être révisées à la baisse, passant d'un objectif de 50 000 unités à un volume plus réaliste de 43 000 unités pour le trimestre suivant.
+
+[RISQUES GÉOPOLITIQUES ET MATIÈRES PREMIÈRES]
+Des restrictions douanières accrues et des tensions géopolitiques fluctuantes ont sévèrement perturbé les voies de fret maritime. L'importation de lithium hautement raffiné en provenance d'Asie a subi des retards de livraison majeurs, provoquant un ralentissement direct de 14% de la chaîne de production du Model Y en Europe. Pour atténuer ce risque à long terme, la direction logistique de Tesla explore activement des contrats d'approvisionnement alternatifs avec des raffineries locales situées en Finlande et en Allemagne, bien que cela implique une hausse temporaire des coûts de fabrication de 7% par véhicule.

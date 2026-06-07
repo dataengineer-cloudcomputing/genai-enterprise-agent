@@ -1,0 +1,10 @@
+--- RAPPORT STRATÉGIQUE BMW - Q3 2025 ---
+Constructeur : BMW
+Année : 2025
+Région : Europe (Allemagne)
+
+[TRANSITION INDUSTRIELLE ET APPROVISIONNEMENT CRITIQUE]
+Le groupe BMW affiche une progression stable de sa gamme d'EV (i4 et iX3) sur son marché domestique en 2025. Néanmoins, la transition vers l'architecture de nouvelle génération "Neue Klasse" génère des tensions logistiques internes. Le principal risque identifié concerne la dépendance critique envers les semi-conducteurs de puissance de nouvelle génération. Un incendie chez un fournisseur de puces de rang 2 en Malaisie a provoqué des ruptures d'approvisionnement, forçant l'usine de Munich à mettre en place un chômage technique partiel de 5 jours en septembre 2025.
+
+[RISQUES MACROÉCONOMIQUES ET ENÉRGÉTIQUES]
+La volatilité des prix de l'électricité industrielle en Allemagne demeure une préoccupation logistique majeure pour la production des groupes motopropulseurs. Bien que BMW ait sécurisé 70% de ses besoins énergétiques via des contrats d'achat d'énergie verte à long terme (PPA), les 30% restants sont exposés aux fluctuations du marché spot, menaçant la marge brute opérationnelle. De plus, les grèves récurrentes dans le secteur ferroviaire allemand ont perturbé l'acheminement des véhicules finis vers les ports d'exportation de Bremerhaven.
