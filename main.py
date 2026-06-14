@@ -1,17 +1,46 @@
 import os
 import sys
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-
 # Security / Architecture: Dynamic paths resolution
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
+import importlib.util
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 # Import de l'orchestrateur de l'agent et de l'outil brut pour le diagnostic
-from phase2_agent import run_agent
-from tools import execute_sql
+phase2_agent_path = os.path.join(current_dir, "phase2_agent.py")
+if os.path.exists(phase2_agent_path):
+    spec = importlib.util.spec_from_file_location("phase2_agent", phase2_agent_path)
+    phase2_agent = importlib.util.module_from_spec(spec)
+    sys.modules["phase2_agent"] = phase2_agent
+    spec.loader.exec_module(phase2_agent)
+    run_agent = phase2_agent.run_agent
+else:
+    raise ImportError(f"Impossible de résoudre l'importation 'phase2_agent' depuis {phase2_agent_path}")
+# Import de l'outil SQL avec tolérance aux chemins relatifs/absolus
+try:
+    import tools
+    execute_sql = tools.execute_sql
+except Exception as e:
+    tools_path = os.path.join(current_dir, "tools.py")
+    tools_pkg_init = os.path.join(current_dir, "tools", "__init__.py")
+    if os.path.exists(tools_path):
+        spec = importlib.util.spec_from_file_location("tools", tools_path)
+    elif os.path.exists(tools_pkg_init):
+        spec = importlib.util.spec_from_file_location("tools", tools_pkg_init)
+    else:
+        raise ImportError(
+            f"Impossible de résoudre l'importation 'tools' depuis {tools_path} ou {tools_pkg_init}"
+        ) from e
+
+    tools = importlib.util.module_from_spec(spec)
+    sys.modules["tools"] = tools
+    spec.loader.exec_module(tools)
+    execute_sql = getattr(tools, "execute_sql")
+
+
 
 # Initialisation de l'API FastAPI
 app = FastAPI(
@@ -68,7 +97,7 @@ def chat_endpoint(payload: ChatRequest):
 
 # =====================================================================
 # ROUTE DE DIAGNOSTIC CHIRURGICAL (SANS RECOURS AU GRAPHE LANGGRAPH)
-# =====================================================================
+# ========================t=============================================
 
 @app.post("/api/v1/test-sql")
 def test_sql_endpoint():

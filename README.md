@@ -61,8 +61,9 @@ python3 src/phase1_etl.py
 Ouvrez deux terminaux :
 
 **Terminal 1 — Lancement de l'Agent principal (FastAPI) :**
-  L'agent est déployé de manière Serverless et accessible publiquement sur Google Cloud Run :
-  👉 **Endpoint API :** https://ev-agent-api-44052798444.europe-west1.run.app/docs
+  L'agent est déployé de manière Serverless et accessible publiquement avec FASTAPI :
+  Documentation interactive (Swagger UI) : http://localhost:8080/docs
+  Point d'entrée de l'API (FastAPI Endpoint) : http://localhost:8080/
 
 **Terminal 2 — Interface graphique (Streamlit) :**
 

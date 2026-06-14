@@ -135,7 +135,8 @@ Chaque sortie du script `ragas_eval.py` a été auditée manuellement selon deux
 
 - **Faithfulness moyen : 1.0 / 1.0** — taux d'hallucination nul grâce au strict filtrage du System Prompt.
 - **Answer Relevance moyen : 1.0 / 1.0** — synthèses claires, directes et structurées en Markdown professionnel.
-📡 **URL de l'Agent de Production :** https://ev-agent-api-44052798444.europe-west1.run.app/api/v1/chat
+📡 Documentation interactive (Swagger UI) : http://localhost:8080/docs
+   Point d'entrée de l'API (FastAPI Endpoint) : http://localhost:8080/
 
 Chaque réponse générée par la suite de tests automatisée via l'endpoint Cloud Run a fait l'objet d'un audit de conformité strict reposant sur la fidélité textuelle et la pertinence applicative.
 
