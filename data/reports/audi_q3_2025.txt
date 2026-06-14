@@ -1,0 +1,16 @@
+--- RAPPORT STRATÉGIQUE AUDI – Q3 2025 ---
+Constructeur : Audi
+Année : 2025
+Région : Europe (Allemagne & Autriche)
+
+[SEGMENT PREMIUM ET PERFORMANCE FINANCIÈRE]
+Audi maintient sa position dominante dans le segment premium électrique avec un chiffre d'affaires de 97 400 000 euros au Q3 2025. Le Q8 e-tron représente le modèle phare avec 24 000 ventes trimestrielles en Europe. L'A6 e-tron, lancé début 2025, génère un carnet de commandes de 35 000 unités. La marge opérationnelle reste élevée à 11,2% grâce au positionnement premium de la marque.
+
+[RISQUES DE PRODUCTION ET QUALITÉ]
+L'usine de Bruxelles, dédiée au Q8 e-tron, a subi une interruption de 3 semaines en septembre 2025 suite à un incendie mineur dans l'atelier de peinture. Des rappels préventifs ont concerné 8 000 véhicules en raison d'un problème logiciel sur le système de gestion thermique des batteries. Ces incidents ont généré des coûts exceptionnels estimés à 150 millions d'euros.
+
+[RISQUES D'APPROVISIONNEMENT EN SEMI-CONDUCTEURS]
+La pénurie de puces spécialisées pour les systèmes d'assistance à la conduite de niveau 2+ continue d'affecter la production. Audi a dû simplifier temporairement les fonctionnalités de certains modèles pour maintenir les cadences de production. Des contrats pluriannuels avec TSMC et Samsung ont été signés pour sécuriser l'approvisionnement à partir de 2026.
+
+[TRANSFORMATION DIGITALE]
+Audi accélère le déploiement de mises à jour logicielles over-the-air pour améliorer l'expérience client sans rappel physique. L'investissement dans l'IA embarquée atteint 800 millions d'euros pour la période 2025-2027.

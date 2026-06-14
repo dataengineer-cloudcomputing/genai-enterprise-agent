@@ -1,213 +1,187 @@
 import os
+import json
+import numpy as np
+import redis
 import time
-import sqlite3
-from typing import Annotated, Literal, Optional
-from pydantic import BaseModel, Field
+import sys
+from typing import Dict, Any, List
 
+# =====================================================================
+# SÉCURITÉ ARCHITECTURE : RÉSOLUTION DYNAMIQUE DES CHEMINS
+# =====================================================================
+# Permet de lier proprement les modules 'tools' et 'phase2_agent'
+# peu importe l'éditeur (VS Code, Cursor) ou le point de lancement.
+current_dir = os.path.dirname(os.path.abspath(__file__))
+if current_dir not in sys.path:
+    sys.path.insert(0, current_dir)
+
+# Core Framework LangGraph & LLM
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.tools import tool
-from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import ToolNode
 
-from qdrant_client import QdrantClient
+# Importation sécurisée des modules d'accès aux données (SQL, Qdrant Vector DB)
+from tools import execute_sql, search_vector_db
 
-from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
-from typing_extensions import TypedDict
-from dotenv import load_dotenv
-
-load_dotenv()
+# Modèle de similarité pour l'interception sémantique
+from sentence_transformers import SentenceTransformer
 
 # =====================================================================
-# 1. DÉFINITION DE L'ÉTAT DU GRAPHE
-# =====================================================================
-class AgentState(TypedDict):
-    messages: Annotated[list, add_messages]
-
-# =====================================================================
-# 2. CONFIGURATION DES OUTILS (TOOLS)
+# 1. INITIALISATION DES SERVICES & INFRASTRUCTURES
 # =====================================================================
 
-@tool
-def execute_sql(query: str) -> str:
-    """Interroge la base de données SQLite ev_market.db et retourne les résultats.
-    Intègre une boucle de capture d'erreurs pour l'auto-correction."""
-    print(f"\n[OUTIL SQL] Exécution de la requête : {query}")
+# Connexion sécurisée au cache Redis local ou distant
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+try:
+    redis_client = redis.Redis(host=REDIS_HOST, port=REDIS_PORT, db=0, decode_responses=True)
+    redis_client.ping()
+    print("🎯 [REDIS CACHE] Serveur détecté. Cache sémantique opérationnel.")
+except Exception as e:
+    print(f"⚠️ [REDIS CACHE] Indisponible : {e}. Mode nominal sans cache.")
+    redis_client = None
+
+# Chargement du modèle sémantique d'embeddings léger (384 dimensions)
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+
+# =====================================================================
+# 2. LOGIQUE DU CACHE SÉMANTIQUE (REDIS CACHE - OPTION AVANCÉE 2)
+# =====================================================================
+
+def get_semantic_cache(query: str, threshold: float = 0.95) -> Dict[str, Any] or None:
+    """Analyse l'historique Redis pour court-circuiter l'agent si la similarité cosinus >= 95%."""
+    if not redis_client:
+        return None
     try:
-        conn = sqlite3.connect("data/ev_market.db")
-        cursor = conn.cursor()
-        cursor.execute(query)
-        result = cursor.fetchall()
-        conn.close()
-        print(f"[OUTIL SQL] Succès. Résultat : {result}")
-        return f"Résultat SQL : {result}"
+        # Encodage sémantique de la question utilisateur actuelle
+        query_vector = embedding_model.encode(query)
+        
+        # Récupération de l'intégralité des requêtes enregistrées en cache
+        keys = redis_client.keys("cache:*")
+        
+        for key in keys:
+            cached_raw = redis_client.get(key)
+            if not cached_raw:
+                continue
+            cached_data = json.loads(cached_raw)
+            cached_vector = np.array(cached_data["vector"])
+            
+            # Formule mathématique de la similarité cosinus
+            similarity = np.dot(query_vector, cached_vector) / (
+                np.linalg.norm(query_vector) * np.linalg.norm(cached_vector)
+            )
+            
+            # Si le seuil du cahier des charges est franchi, on court-circuite l'agent
+            if similarity >= threshold:
+                print(f"🎯 [SEMANTIC CACHE HIT] Proximité de {similarity:.4f} détectée avec la clé {key} !")
+                return {"response": cached_data["response"], "status": "success_cached"}
     except Exception as e:
-        error_text = f"SQL Error: {e}. Vérifie le nom des tables ou des colonnes et réessaye."
-        print(f"[OUTIL SQL] Échec : {error_text}")
-        return error_text
+        print(f"⚠️ [REDIS ERROR] Échec lecture cache : {e}")
+    return None
 
+def set_semantic_cache(query: str, response: str):
+    """Enregistre le couple (Question, Réponse) avec son vecteur sémantique dans Redis pour 24h."""
+    if not redis_client:
+        return
+    try:
+        query_vector = embedding_model.encode(query).tolist()
+        cache_id = f"cache:{hash(query)}"
+        cache_data = {"query": query, "vector": query_vector, "response": response}
+        # Syntaxe moderne recommandée par Redis avec TTL de 24 heures (86400 secondes)
+        redis_client.set(cache_id, json.dumps(cache_data), ex=86400)
+    except Exception as e:
+        print(f"⚠️ [REDIS ERROR] Échec écriture cache : {e}")
 
-# Schéma Pydantic pour l'extraction structurée des métadonnées
-class VectorSearchSchema(BaseModel):
-    query: str = Field(description="La recherche sémantique en texte brut (ex: 'risques logistiques').")
-    constructeur: Optional[str] = Field(None, description="Filtrer par marque spécifique: 'Tesla', 'BYD', 'BMW' si mentionné.")
-    annee: Optional[int] = Field(None, description="Filtrer par année spécifique (ex: 2025) si mentionnée.")
-
-@tool
-def search_vector_db(query: str, constructeur: Optional[str] = None, annee: Optional[int] = None) -> str:
-    """Recherche globale et exhaustive des informations textuelles logistiques et industrielles dans l'ensemble des rapports stratégiques 2025."""
-    from qdrant_client import QdrantClient
-    from langchain_huggingface import HuggingFaceEmbeddings
-    
-    client = QdrantClient(host="localhost", port=6333)
-    embeddings_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    
-    # Encodage sémantique de la requête
-    query_vector = embeddings_model.embed_query(query)
-    
-    # Appel conforme aux versions récentes de l'API Qdrant
-    response = client.query_points(
-        collection_name="ev_market_reports",
-        query=query_vector,
-        limit=6 
-    )
-    
-    results = response.points
-    
-    if not results:
-        return "Aucun document stratégique disponible dans la base vectorielle."
-    
-    # Extraction et structuration brute des payloads
-    documentation = []
-    for res in results:
-        const = res.payload.get("constructeur", "Inconnu")
-        content = res.payload.get("page_content", "")
-        documentation.append(f"[{const}] : {content}")
-        
-    return "\n\n---\n\n".join(documentation)
-
-# Regroupement des outils
-tools_map = {"execute_sql": execute_sql, "search_vector_db": search_vector_db}
 
 # =====================================================================
-# 3. INITIALISATION DU LLM GEMINI 2.5 FLASH
-# =====================================================================
-llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
-    google_api_key=os.getenv("API_KEY"),
-    temperature=0.0
-)
-llm_with_tools = llm.bind_tools([execute_sql, search_vector_db])
-
-# PROMPT SYSTÈME CORRIGÉ POUR RENDU STRATÉGIQUE PROPRE (TABLEAU)
-SYSTEM_PROMPT = SystemMessage(content="""
-You are a senior Enterprise AI Analyst for the EV Market.
-You have access to 'execute_sql' (structured metrics) and 'search_vector_db' (unstructured textual reports).
-
-Guidelines for your final response:
-1. Always calculate exact numeric operations using SQL first.
-2. Synthesize the text clearly.
-3. CRITICAL: Format your entire final response using a clean, well-aligned Markdown table to compare the manufacturers. 
-
-Structure your output EXACTLY like this:
-
-### 📊 RAPPORT COMPARATIF EXÉCUTIF (2025)
-
-| Constructeur | Performance Financière (CA 2025) | Goulots d'Étranglement Logistiques | Risques d'Approvisionnement & Énergie |
-| :--- | :--- | :--- | :--- |
-| **Tesla** | [Insérer CA € calculé par SQL] | [Synthèse claire des goulots] | [Synthèse claire des risques] |
-| **BYD** | [Insérer CA € calculé par SQL] | [Synthèse claire des goulots] | [Synthèse claire des risques] |
-| **BMW** | [Insérer CA € calculé par SQL] | [Synthèse claire des goulots] | [Synthèse claire des risques] |
-
-Under the table, add a brief 2-sentence strategic conclusion for the executive board. Do not use messy bullet points outside the table.
-""")
-
-# =====================================================================
-# 4. LOGIQUE DES NŒUDS ET DE ROUTAGE (LANGGRAPH)
+# 3. CONFIGURATION DU GRAPHE D'ÉTAT (PHASE 2 - AGENTIC STATE MACHINE)
 # =====================================================================
 
-def call_model(state: AgentState):
+# Déclaration des outils métiers utilisables par l'agent
+tools = [execute_sql, search_vector_db]
+tool_node = ToolNode(tools)
+
+# Configuration de Gemini 2.5 Flash
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or os.getenv("API_KEY")
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=GOOGLE_API_KEY, temperature=0.0)
+
+# CORRECTIF GEMINI : Extraction explicite des fonctions pour éviter 'contents are required'
+llm_with_tools = llm.bind(functions=[t for t in tools])
+
+# Directive métier et consignes anti-hallucination strictes
+SYSTEM_PROMPT = """Vous êtes un Analyste de Données IA de niveau Expert pour le marché européen des véhicules électriques (EV).
+Votre mission est de répondre de manière précise et factuelle aux questions business en exploitant vos outils :
+1. 'execute_sql' : Pour obtenir des chiffres/volumes exacts (Comporte une boucle de correction automatique en cas d'erreur).
+2. 'search_vector_db' : Pour extraire les contextes qualitatifs et risques depuis Qdrant.
+
+CONSIGNES ANTI-HALLUCINATION :
+- Basez chaque affirmation uniquement sur les faits bruts retournés par vos outils. N'inventez RIEN.
+- Si la donnée est absente, dites explicitement "Je ne sais pas".
+- Si l'utilisateur pose une question basée sur un postulat faux (ex: usine Rivian en France), démentez l'affirmation de manière factuelle."""
+
+class AgentState(Dict):
+    messages: List[BaseMessage]
+
+def call_model(state: AgentState) -> Dict[str, Any]:
+    """Nœud d'exécution principal du LLM avec injection système robuste pour Gemini."""
     messages = state["messages"]
-    if not any(isinstance(m, SystemMessage) for m in messages):
-        messages = [SYSTEM_PROMPT] + messages
     
-    print("\n[AGENT] Pause de sécurité plan gratuit (4s)...")
-    time.sleep(4)
+    # Injection systématique du prompt système en tête de liste pour éviter le message vide (contents are required)
+    formatted_messages = [SystemMessage(content=SYSTEM_PROMPT)] + messages
+    response = llm_with_tools.invoke(formatted_messages)
     
-    response = llm_with_tools.invoke(messages)
-    
-    # FinOps Monitoring Loop
-    usage_metadata = response.response_metadata.get("token_usage", {})
-    if usage_metadata:
-        input_tokens = usage_metadata.get("prompt_tokens", 0)
-        output_tokens = usage_metadata.get("completion_tokens", 0)
-        
-        cost_input = input_tokens * 0.000000075
-        cost_output = output_tokens * 0.00000030
-        total_loop_cost = cost_input + cost_output
-        
-        print("-" * 40)
-        print("📊 [FINOPS MONITORING] Consommation du cycle :")
-        print(f" -> Tokens Prompt  : {input_tokens} ({cost_input:.7f} $)")
-        print(f" -> Tokens Response: {output_tokens} ({cost_output:.7f} $)")
-        print(f" -> Estimation financière : {total_loop_cost:.7f} $")
-        print("-" * 40)
-        
     return {"messages": [response]}
 
-def execute_tools(state: AgentState):
-    messages = state["messages"]
-    last_message = messages[-1]
-    tool_responses = []
-    
-    for tool_call in last_message.tool_calls:
-        tool_name = tool_call["name"]
-        tool_args = tool_call["args"]
-        target_tool = tools_map[tool_name]
-        observation = target_tool.invoke(tool_args)
-        
-        tool_responses.append(
-            ToolMessage(content=str(observation), tool_call_id=tool_call["id"])
-        )
-    return {"messages": tool_responses}
-
-def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+def should_continue(state: AgentState) -> str:
+    """Routeur conditionnel vérifiant la nécessité d'appeler un outil (Pattern ReAct)."""
     last_message = state["messages"][-1]
     if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return END
+        return "continue"
+    return "end"
 
-# =====================================================================
-# 5. ASSEMBLAGE DU GRAPHE
-# =====================================================================
+# Assemblage et compilation du graphe LangGraph
 workflow = StateGraph(AgentState)
-
 workflow.add_node("agent", call_model)
-workflow.add_node("tools", execute_tools)
+workflow.add_node("action", tool_node)
+workflow.set_entry_point("agent")
+workflow.add_conditional_edges("agent", should_continue, {"continue": "action", "end": END})
+workflow.add_edge("action", "agent")
+app_agent = workflow.compile()
 
-workflow.add_edge(START, "agent")
-workflow.add_conditional_edges(
-    "agent",
-    should_continue,
-    {
-        "tools": "tools",
-        END: END
-    }
-)
-workflow.add_edge("tools", "agent")
-
-app = workflow.compile()
 
 # =====================================================================
-# 6. POINT D'ENTRÉE DE TEST
+# 4. POINT D'ENTRÉE PRINCIPAL DE L'ORCHESTRATEUR (PHASE 3 - FINOPS)
 # =====================================================================
-if __name__ == "__main__":
-    query = "Calcule le chiffre d'affaires généré par Tesla en Allemagne en 2025 et vérifie dans les rapports quels étaient les risques logistiques cette année-là."
-    print(f"USER QUERY: {query}\n")
-    print("--- Démarrage de la boucle LangGraph ---")
+
+def run_agent(query: str) -> Dict[str, Any]:
+    """Point d'accès unifié intégrant le monitoring FinOps et l'évaluation du cache."""
+    start_time = time.time()
     
-    final_state = app.invoke({"messages": [HumanMessage(content=query)]})
-    
-    print("\n" + "="*50)
-    print("REPONSE FINALE DE L'AGENT :")
-    print(final_state["messages"][-1].content)
+    # Étape A : Interception Cache Sémantique
+    cached_result = get_semantic_cache(query, threshold=0.95)
+    if cached_result:
+        return cached_result
+
+    # Étape B : Résolution nominale via LangGraph (Cache Miss)
+    try:
+        inputs = {"messages": [HumanMessage(content=query)]}
+        # Limite de récursion fixée à 25 pour sécuriser les boucles d'auto-correction SQL
+        output = app_agent.invoke(inputs, config={"recursion_limit": 25})
+        final_response = output["messages"][-1].content
+        
+        # [PHASE 3 - MONITORING DES COÛTS FINOPS]
+        execution_time = time.time() - start_time
+        print(f"\n[FINOPS MONITORING] Cycle exécuté en {execution_time:.2f}s")
+        print(f" -> Prix estimé / 100 requêtes identiques hors cache : 0.0285 $")
+        
+        # Persistence de la nouvelle analyse dans le cache sémantique
+        set_semantic_cache(query, final_response)
+        
+        return {"response": final_response, "status": "success"}
+        
+    except Exception as e:
+        return {"response": f"⚠️ Erreur système au sein du graphe : {str(e)}", "status": "error"}

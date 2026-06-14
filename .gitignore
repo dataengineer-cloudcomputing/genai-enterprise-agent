@@ -1,4 +1,15 @@
-```text
+# Environnement virtuel et dépendances locales
 venv/
-__pycache__/
 .env
+
+# Caches Python
+__pycache__/
+*.pyc
+
+# Bases de données locales (SQLite et stockage Qdrant)
+*.db
+qdrant_storage/
+
+# Résultats de tests et logs
+ragas_results.json
+.DS_Store

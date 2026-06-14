@@ -2,11 +2,9 @@ import sqlite3
 import os
 
 def create_database():
-    # Définition du chemin de la base de données
     db_dir = "data"
     db_path = os.path.join(db_dir, "ev_market.db")
     
-    # Assurer que le dossier data existe
     if not os.path.exists(db_dir):
         os.makedirs(db_dir)
         print(f"[SQL] Création du dossier : {db_dir}")
@@ -15,56 +13,53 @@ def create_database():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
 
-    # Nettoyage de l'ancienne table pour éviter les doublons ou conflits de schéma
     print("[SQL] Réinitialisation de la table Ventes...")
     cursor.execute("DROP TABLE IF EXISTS Ventes;")
 
-    # Création de la table avec un schéma strict et des types appropriés
+    # Schéma relationnel strict — Alignement avec les colonnes attendues par l'agent
     cursor.execute('''
         CREATE TABLE Ventes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
+            annee INTEGER NOT NULL,
             marque TEXT NOT NULL,
             modele TEXT NOT NULL,
             pays TEXT NOT NULL,
             unites_vendues INTEGER NOT NULL,
-            prix_moyen_vente REAL NOT NULL,
             chiffre_affaires REAL NOT NULL
         );
     ''')
     print("[SQL] Table Ventes créée avec succès.")
 
-    # Jeu de données d'entreprise enrichi (Tesla, BYD, BMW) pour l'année 2025
+    # Ingestion du jeu de données représentatif de l'exercice fiscal 2025
     donnees_ventes = [
-        # Données Tesla
-        ('2025-01-15', 'Tesla', 'Model Y', 'Allemagne', 2000, 45000.0, 90000000.0),
-        ('2025-02-20', 'Tesla', 'Model 3', 'Allemagne', 500, 50000.0, 25000000.0),
-        
-        # Données BYD
-        ('2025-03-10', 'BYD', 'Atto 3', 'France', 1200, 38000.0, 45600000.0),
-        ('2025-05-18', 'BYD', 'Seal', 'Allemagne', 600, 42000.0, 25200000.0),
-        
-        # Données BMW (Nouveaux enregistrements pour valider ton test de Phase 3)
-        ('2025-06-12', 'BMW', 'i4', 'Allemagne', 1500, 55000.0, 82500000.0),
-        ('2025-08-22', 'BMW', 'iX3', 'Allemagne', 800, 65000.0, 52000000.0)
+        ('2025-09-30', 2025, 'Audi', 'Q8 e-tron', 'Europe', 24000, 97400000.0),
+        ('2025-09-30', 2025, 'BMW', 'i4 / iX3', 'Allemagne', 2300, 134500000.0),
+        ('2025-09-30', 2025, 'BYD', 'Atto 3 / Seal', 'Europe', 1800, 70800000.0),
+        ('2025-09-30', 2025, 'Hyundai', 'IONIQ 5', 'Europe', 22000, 39200000.0),
+        ('2025-09-30', 2025, 'Hyundai', 'IONIQ 6', 'Europe', 19000, 35000000.0),
+        ('2025-09-30', 2025, 'Mercedes', 'EQS', 'Europe', 18000, 134500000.0),
+        ('2025-09-30', 2025, 'Renault', 'Renault 5 EV', 'Europe', 38000, 38300000.0),
+        ('2025-09-30', 2025, 'Megane E-Tech', 'Europe', 22000, 24000000.0),
+        ('2025-09-30', 2025, 'Rivian', 'R1T / R1S', 'Europe', 8500, 38900000.0),
+        ('2025-09-30', 2025, 'Stellantis', 'Peugeot e-208', 'Europe', 52000, 72000000.0),
+        ('2025-09-30', 2025, 'Stellantis', 'Fiat 500e', 'Europe', 31000, 46700000.0),
+        ('2025-09-30', 2025, 'Tesla', 'Model Y', 'Allemagne', 43000, 115000000.0),
+        ('2025-09-30', 2025, 'Volkswagen', 'ID.4', 'Europe', 45000, 55000000.0),
+        ('2025-09-30', 2025, 'Volkswagen', 'ID.7', 'Europe', 28000, 34500000.0)
     ]
 
-    # Insertion en masse (Bulk Insert) sécurisée pour éviter les injections SQL
     cursor.executemany('''
-        INSERT INTO Ventes (date, marque, modele, pays, unites_vendues, prix_moyen_vente, chiffre_affaires)
+        INSERT INTO Ventes (date, annee, marque, modele, pays, unites_vendues, chiffre_affaires)
         VALUES (?, ?, ?, ?, ?, ?, ?);
     ''', donnees_ventes)
 
-    # Validation des écritures dans le fichier .db
     conn.commit()
     
-    # Petite vérification de contrôle pour afficher le nombre de lignes insérées
     cursor.execute("SELECT COUNT(*) FROM Ventes;")
     total_lignes = cursor.fetchone()[0]
+    print(f"[SUCCESS] Base SQL enrichie. {total_lignes} lignes enregistrées.")
     
-    print(f"[SUCCESS] Base de données initialisée. {total_lignes} transactions enregistrées.")
-    
-    # Fermeture propre de la connexion
     conn.close()
 
 if __name__ == "__main__":
